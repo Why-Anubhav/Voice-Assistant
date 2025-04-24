@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>AnuBunny.ai</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      background-color: #121212;
+      color: #ffffff;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      margin: 0;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .container {
+      background-color: #1e1e1e;
+      padding: 40px 30px;
+      border-radius: 16px;
+      box-shadow: 0 0 20px rgba(0, 0, 0, 0.6);
+      text-align: center;
+      width: 90%;
+      max-width: 500px;
+    }
+
+    h1 {
+      color: #00bcd4;
+      margin-bottom: 20px;
+    }
+
+    input[type="text"] {
+      width: 100%;
+      padding: 12px 16px;
+      margin: 10px 0;
+      border: none;
+      border-radius: 8px;
+      background-color: #333;
+      color: #fff;
+      font-size: 16px;
+      outline: none;
+    }
+
+    button {
+      background-color: #00bcd4;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      margin-top: 8px;
+      border-radius: 8px;
+      font-size: 16px;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+    }
+
+    button:hover {
+      background-color: #0097a7;
+    }
+
+    #output {
+      margin-top: 10px;
+      padding: 15px;
+      background-color: #2a2a2a;
+      border-radius: 8px;
+      min-height: 60px;
+      white-space: pre-line;
+    }
+
+    #spinner {
+      margin: 15px auto;
+      display: none;
+      border: 6px solid #2a2a2a;
+      border-top: 6px solid #00bcd4;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    #waveform {
+      display: none;
+      height: 30px;
+      margin: 10px 0;
+    }
+
+    .bar {
+      display: inline-block;
+      width: 5px;
+      height: 100%;
+      margin: 0 1px;
+      background: #00bcd4;
+      animation: pulse 1s infinite ease-in-out;
+    }
+
+    .bar:nth-child(2) {
+      animation-delay: -0.8s;
+    }
+    .bar:nth-child(3) {
+      animation-delay: -0.6s;
+    }
+    .bar:nth-child(4) {
+      animation-delay: -0.4s;
+    }
+    .bar:nth-child(5) {
+      animation-delay: -0.2s;
+    }
+
+    @keyframes pulse {
+      0%, 100% { height: 10px; }
+      50% { height: 30px; }
+    }
+
+    .history {
+      margin-top: 20px;
+      text-align: left;
+      max-height: 200px;
+      overflow-y: auto;
+      background: #2a2a2a;
+      padding: 10px;
+      border-radius: 8px;
+    }
+    .history-entry {
+      margin-bottom: 10px;
+    }
+    .history-entry span {
+      display: block;
+    }
+    .user-query {
+      color: #00bcd4;
+      font-weight: bold;
+    }
+    .ai-response {
+      color: #ffffff;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>AnuBunny.ai</h1>
+
+    <input type="text" id="query" placeholder="Speak or type a command" />
+    <button onclick="startListening()">🎤 Speak</button>
+
+    <div id="waveform">
+      <div class="bar"></div>
+      <div class="bar"></div>
+      <div class="bar"></div>
+      <div class="bar"></div>
+      <div class="bar"></div>
+    </div>
+
+    <div id="spinner"></div>
+
+    <h3>Response:</h3>
+    <p id="output">Waiting for your command...</p>
+
+    <div class="history" id="history-log"></div>
+  </div>
+
+  <script>
+    function speak(text) {
+      const synth = window.speechSynthesis;
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.rate = 1;
+      utter.pitch = 1;
+      synth.speak(utter);
+    }
+
+    function detectAction(query) {
+      const q = query.toLowerCase();
+      if (q.includes("search wikipedia")) return "wikipedia";
+      if (q.includes("play")) return "play";
+      if (q.includes("what time") || q.includes("tell me the time")) return "time";
+      if (q.includes("open")) return "site";
+      return "gemini";
+    }
+
+    async function processQuery(query) {
+      const action = detectAction(query);
+      document.getElementById("spinner").style.display = "block";
+      const response = await fetch("/process", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, query })
+      });
+
+      const data = await response.json();
+      document.getElementById("spinner").style.display = "none";
+      document.getElementById("output").innerText = data.response;
+      speak(data.response);
+      appendToHistory(query, data.response);
+    }
+
+    function appendToHistory(query, response) {
+      const history = document.getElementById("history-log");
+      const entry = document.createElement("div");
+      entry.className = "history-entry";
+      entry.innerHTML = `<span class='user-query'>You: ${query}</span><span class='ai-response'>Jarvis: ${response}</span>`;
+      history.appendChild(entry);
+      history.scrollTop = history.scrollHeight;
+    }
+
+    function startListening() {
+      const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+      recognition.lang = "en-IN";
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+
+      document.getElementById("waveform").style.display = "block";
+
+      recognition.start();
+
+      recognition.onresult = (event) => {
+        const voiceText = event.results[0][0].transcript;
+        document.getElementById("query").value = voiceText;
+        processQuery(voiceText);
+      };
+
+      recognition.onerror = (event) => {
+        console.error("Speech recognition error:", event.error);
+        document.getElementById("waveform").style.display = "none";
+      };
+
+      recognition.onend = () => {
+        document.getElementById("waveform").style.display = "none";
+      };
+    }
+
+    document.getElementById("query").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        processQuery(e.target.value);
+      }
+    });
+  </script>
+</body>
+</html>
